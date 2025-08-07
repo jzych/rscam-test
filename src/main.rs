@@ -14,7 +14,9 @@ fn main() -> io::Result<()> {
     println!("Using device: {}\n", path);
 
     let dev = Device::with_path(path)?;
+    println!("1");
     let controls = dev.query_controls()?;
+    println!("2");
 
     for control in controls {
         println!("{}", control);
