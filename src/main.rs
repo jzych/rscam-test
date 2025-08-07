@@ -42,7 +42,7 @@ fn main() {
         .start(&rscam::Config {
             interval: (1, 10),
             resolution: (1280, 720),
-            format: b"MJPG",
+            format: b"BA12",
             ..Default::default()
         })
         .unwrap();
