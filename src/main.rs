@@ -12,8 +12,8 @@ fn main() -> io::Result<()> {
     let format = dev.format()?;
     println!("Active format:\n{}", format);
 
-    let params = dev.params()?;
-    println!("Active parameters:\n{}", params);
+    // let params = dev.params()?;
+    // println!("Active parameters:\n{}", params);
 
     println!("Available formats:");
     for format in dev.enum_formats()? {
