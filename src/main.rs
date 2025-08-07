@@ -1,58 +1,38 @@
-// extern crate rscam;
+use std::io;
 
-// use rscam::{Camera, ResolutionInfo};
+use v4l::prelude::*;
+use v4l::video::Capture;
 
-// fn main() {
-//     let camera = Camera::new("/dev/video0").unwrap();
+fn main() -> io::Result<()> {
+    let path = "/dev/video0";
+    println!("Using device: {}\n", path);
 
-//     for wformat in camera.formats() {
-//         let format = wformat.unwrap();
-//         println!("{:?}", format);
+    let dev = Device::with_path(path)?;
 
-//         let resolutions = camera.resolutions(&format.format).unwrap();
+    let format = dev.format()?;
+    println!("Active format:\n{}", format);
 
-//         if let ResolutionInfo::Discretes(d) = resolutions {
-//             for resol in &d {
-//                 println!(
-//                     "  {}x{}  {:?}",
-//                     resol.0,
-//                     resol.1,
-//                     camera.intervals(&format.format, *resol).unwrap()
-//                 );
-//             }
-//         } else {
-//             println!("  {:?}", resolutions);
-//         }
-//     }
-// }
+    let params = dev.params()?;
+    println!("Active parameters:\n{}", params);
 
-use std::fs;
-use std::io::Write;
+    println!("Available formats:");
+    for format in dev.enum_formats()? {
+        println!("  {} ({})", format.fourcc, format.description);
 
-fn main() {
-    let mut camera = rscam::new("/dev/video0").unwrap();
+        for framesize in dev.enum_framesizes(format.fourcc)? {
+            for discrete in framesize.size.to_discrete() {
+                println!("    Size: {}", discrete);
 
-    for wformat in camera.formats() {
-        let format = wformat.unwrap();
-        println!("{:?}", format);
-        println!("  {:?}", camera.resolutions(&format.format).unwrap());
+                for frameinterval in
+                    dev.enum_frameintervals(framesize.fourcc, discrete.width, discrete.height)?
+                {
+                    println!("      Interval:  {}", frameinterval);
+                }
+            }
+        }
+
+        println!()
     }
 
-    camera
-        .start(&rscam::Config {
-            interval: (1, 10),
-            resolution: (1280, 720),
-            format: b"BA12",
-            ..Default::default()
-        })
-        .unwrap();
-
-    for i in 0..10 {
-        let frame = camera.capture().unwrap();
-
-        println!("Frame of length {}", frame.len());
-
-        let mut file = fs::File::create(&format!("frame-{}.jpg", i)).unwrap();
-        file.write_all(&frame[..]).unwrap();
-    }
+    Ok(())
 }
