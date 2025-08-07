@@ -1,37 +1,23 @@
 use std::io;
 
+use v4l::context;
 use v4l::prelude::*;
-use v4l::video::Capture;
 
 fn main() -> io::Result<()> {
+    let devices = context::enum_devices();
+
+    for dev in devices {
+        println!("{}: {}", dev.index(), dev.name().unwrap());
+    }
+
     let path = "/dev/video0";
     println!("Using device: {}\n", path);
 
     let dev = Device::with_path(path)?;
+    let controls = dev.query_controls()?;
 
-    let format = dev.format()?;
-    println!("Active format:\n{}", format);
-
-    // let params = dev.params()?;
-    // println!("Active parameters:\n{}", params);
-
-    println!("Available formats:");
-    for format in dev.enum_formats()? {
-        println!("  {} ({})", format.fourcc, format.description);
-
-        for framesize in dev.enum_framesizes(format.fourcc)? {
-            for discrete in framesize.size.to_discrete() {
-                println!("    Size: {}", discrete);
-
-                for frameinterval in
-                    dev.enum_frameintervals(framesize.fourcc, discrete.width, discrete.height)?
-                {
-                    println!("      Interval:  {}", frameinterval);
-                }
-            }
-        }
-
-        println!()
+    for control in controls {
+        println!("{}", control);
     }
 
     Ok(())
