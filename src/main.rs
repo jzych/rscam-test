@@ -9,7 +9,6 @@ use gst::prelude::*;
 /// Build an OpenCV Mat (rows x cols x 3 channels) from a raw BGR byte slice.
 /// Expects data.len() >= (rows * cols * 3) and will use the first that many bytes.
 fn mat_from_bgr_bytes(rows: i32, cols: i32, data: &[u8]) -> Result<Mat> {
-    // Mat::from_slice builds a single-row Mat with (rows*cols*3) elements, then reshape into H x W with 3 channels
     let expected = (rows as usize) * (cols as usize) * 3;
     if data.len() < expected {
         anyhow::bail!(
@@ -19,10 +18,9 @@ fn mat_from_bgr_bytes(rows: i32, cols: i32, data: &[u8]) -> Result<Mat> {
         );
     }
     let slice = &data[..expected];
-    let m = Mat::from_slice(slice).context("Failed to make Mat from slice")?;
-    let m = m
-        .reshape(3, rows)
-        .context("Failed to reshape Mat to HxWx3")?;
+    // clone to get an owned Mat
+    let m = Mat::from_slice(slice)?.try_clone()?;
+    let m = m.reshape(3, rows)?;
     Ok(m)
 }
 
