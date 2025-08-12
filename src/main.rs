@@ -112,7 +112,7 @@ fn main() -> Result<()> {
     // If libcamerasrc is not available on your system, replace "libcamerasrc" with "rpicamsrc"
     // e.g. "rpicamsrc ! video/x-raw,width=640,height=480,format=RGB ! ..."
 
-    let pipeline = match gst::parse_launch(&pipeline_desc) {
+    let pipeline = match gst::parse::launch(&pipeline_desc) {
         Ok(p) => p,
         Err(e) => {
             eprintln!(
@@ -124,7 +124,7 @@ fn main() -> Result<()> {
                 w = width,
                 h = height
             );
-            gst::parse_launch(&alt)?
+            gst::parse::launch(&alt)?
         }
     };
 
