@@ -1,8 +1,8 @@
 use anyhow::Result;
 use gstreamer as gst;
+use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
 use image::{Rgb, RgbImage};
-use std::sync::Arc;
 use std::time::Instant;
 
 fn rgb_to_hsv(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
