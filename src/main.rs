@@ -1,117 +1,40 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use gstreamer as gst;
-use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
-use image::{Rgb, RgbImage};
+use opencv::{core, highgui, imgproc, prelude::*, types};
 use std::time::Instant;
 
-fn rgb_to_hsv(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
-    // r,g,b in 0..255 -> returns (h in 0..360, s in 0..1, v in 0..1)
-    let rf = r as f32 / 255.0;
-    let gf = g as f32 / 255.0;
-    let bf = b as f32 / 255.0;
+use gst::prelude::*;
+use opencv::prelude::*;
 
-    let max = rf.max(gf).max(bf);
-    let min = rf.min(gf).min(bf);
-    let delta = max - min;
-
-    let h = if delta == 0.0 {
-        0.0
-    } else if (max - rf).abs() < std::f32::EPSILON {
-        60.0 * (((gf - bf) / delta) % 6.0)
-    } else if (max - gf).abs() < std::f32::EPSILON {
-        60.0 * (((bf - rf) / delta) + 2.0)
-    } else {
-        60.0 * (((rf - gf) / delta) + 4.0)
-    };
-
-    let h = if h < 0.0 { h + 360.0 } else { h };
-    let s = if max == 0.0 { 0.0 } else { delta / max };
-    let v = max;
-    (h, s, v)
-}
-
-fn is_red_hsv(h: f32, s: f32, v: f32) -> bool {
-    // Tune thresholds here:
-    // Hue near 0..10 or 350..360 (we check as 0..10 and 160..180 for typical 0..360 wrap)
-    // But camera hue ranges vary; you may adjust.
-    let sat_min = 0.35; // require some saturation
-    let val_min = 0.15; // exclude very dark pixels
-
-    if s < sat_min || v < val_min {
-        return false;
-    }
-    // Consider red hue ranges:
-    (h >= 0.0 && h <= 15.0) || (h >= 345.0 && h <= 360.0)
-}
-
-fn annotate_bbox(img: &mut RgbImage, x0: u32, y0: u32, x1: u32, y1: u32) {
-    // Draw a 3-pixel-thick rectangle in green
-    let w = img.width();
-    let h = img.height();
-    for dx in 0..=2 {
-        // top
-        for x in x0.saturating_sub(dx)..=x1.saturating_add(dx) {
-            if y0 + dx < h {
-                img.put_pixel(
-                    x.clamp(0, w - 1),
-                    (y0 + dx).clamp(0, h - 1),
-                    Rgb([0, 255, 0]),
-                );
-            }
-        }
-        // bottom
-        for x in x0.saturating_sub(dx)..=x1.saturating_add(dx) {
-            if y1 >= dx {
-                img.put_pixel(
-                    x.clamp(0, w - 1),
-                    (y1 - dx).clamp(0, h - 1),
-                    Rgb([0, 255, 0]),
-                );
-            }
-        }
-        // left
-        for y in y0.saturating_sub(dx)..=y1.saturating_add(dx) {
-            if x0 + dx < w {
-                img.put_pixel(
-                    (x0 + dx).clamp(0, w - 1),
-                    y.clamp(0, h - 1),
-                    Rgb([0, 255, 0]),
-                );
-            }
-        }
-        // right
-        for y in y0.saturating_sub(dx)..=y1.saturating_add(dx) {
-            if x1 >= dx {
-                img.put_pixel(
-                    (x1 - dx).clamp(0, w - 1),
-                    y.clamp(0, h - 1),
-                    Rgb([0, 255, 0]),
-                );
-            }
-        }
-    }
+// Helper: convert raw bytes -> OpenCV Mat (BGR)
+fn mat_from_bgr_bytes(rows: i32, cols: i32, data: &[u8]) -> Result<Mat> {
+    // Create a Mat from slice then reshape to rows x cols with 3 channels.
+    // Mat::from_slice makes a single-row Mat; reshape will set proper rows and channels.
+    let mut m = Mat::from_slice(data).context("Failed to create Mat from slice")?;
+    // reshape(channels, rows)
+    let m = m
+        .reshape(3, rows)
+        .context("Failed to reshape Mat into HxWx3")?;
+    Ok(m)
 }
 
 fn main() -> Result<()> {
     // Initialize GStreamer
-    gst::init()?;
+    gst::init().context("Failed to init gstreamer")?;
 
-    // Desired capture size and caps
-    let width = 640;
-    let height = 480;
+    // capture size
+    let width = 640i32;
+    let height = 480i32;
 
-    // Try libcamerasrc pipeline; fallback to rpicamsrc if needed.
-    // This appsink will produce RGB bytes (one pixel = 3 bytes: R, G, B)
+    // Build a pipeline asking for BGR (OpenCV default)
     let pipeline_desc = format!(
-        "libcamerasrc ! video/x-raw,width={w},height={h},format=RGB ! videoconvert ! appsink name=sink max-buffers=1 drop=true",
+        "libcamerasrc ! video/x-raw,width={w},height={h},format=BGR ! videoconvert ! appsink name=sink max-buffers=1 drop=true",
         w = width,
         h = height
     );
 
-    // If libcamerasrc is not available on your system, replace "libcamerasrc" with "rpicamsrc"
-    // e.g. "rpicamsrc ! video/x-raw,width=640,height=480,format=RGB ! ..."
-
+    // Try libcamerasrc first, fallback to rpicamsrc
     let pipeline = match gst::parse::launch(&pipeline_desc) {
         Ok(p) => p,
         Err(e) => {
@@ -120,145 +43,206 @@ fn main() -> Result<()> {
                 e
             );
             let alt = format!(
-                "rpicamsrc ! video/x-raw,width={w},height={h},format=RGB ! videoconvert ! appsink name=sink max-buffers=1 drop=true",
+                "rpicamsrc ! video/x-raw,width={w},height={h},format=BGR ! videoconvert ! appsink name=sink max-buffers=1 drop=true",
                 w = width,
                 h = height
             );
-            gst::parse::launch(&alt)?
+            gst::parse::launch(&alt).context("Failed to create pipeline with rpicamsrc")?
         }
     };
 
-    // Get the appsink
+    // Get the appsink element
     let appsink = pipeline
         .clone()
         .dynamic_cast::<gst::Bin>()
         .map_err(|_| anyhow::anyhow!("Pipeline is not a Bin"))?
         .by_name("sink")
-        .ok_or_else(|| anyhow::anyhow!("appsink element missing"))?
+        .ok_or_else(|| anyhow::anyhow!("appsink element named 'sink' missing"))?
         .dynamic_cast::<gst_app::AppSink>()
-        .map_err(|_| anyhow::anyhow!("Element is not an AppSink"))?;
+        .map_err(|_| anyhow::anyhow!("Element 'sink' is not an AppSink"))?;
 
-    // Configure appsink to pull samples
-    appsink.set_caps(Some(
-        &gst::Caps::builder("video/x-raw")
-            .field("format", &"RGB")
-            .field("width", &(width as i32))
-            .field("height", &(height as i32))
-            .build(),
-    ));
+    // Set caps in case
+    let caps = gst::Caps::builder("video/x-raw")
+        .field("format", &"BGR")
+        .field("width", &(width as i32))
+        .field("height", &(height as i32))
+        .build();
+    appsink.set_caps(Some(&caps));
 
-    pipeline.set_state(gst::State::Playing)?;
+    // Start pipeline
+    pipeline
+        .set_state(gst::State::Playing)
+        .context("Failed to set pipeline to Playing")?;
 
-    println!("Started pipeline. Press Ctrl+C to stop.");
+    println!("Pipeline started. Opening window. Press 'q' in window or Ctrl+C to quit.");
+
+    // OpenCV window
+    let window_name = "Pi Camera - Red Detection";
+    highgui::named_window(window_name, highgui::WINDOW_AUTOSIZE)?;
 
     let mut frame_count: u64 = 0;
-    let start = Instant::now();
+    let t0 = Instant::now();
 
     loop {
-        // Pull sample (blocking)
-        if let Ok(sample) = appsink.pull_sample() {
-            frame_count += 1;
-            let buffer = sample
-                .buffer()
-                .ok_or_else(|| anyhow::anyhow!("No buffer"))?;
-            let map = buffer.map_readable()?;
-            let data = map.as_slice();
+        // pull_sample returns Result<Sample, BoolError>
+        match appsink.pull_sample() {
+            Ok(sample) => {
+                frame_count += 1;
+                let buffer = sample
+                    .buffer()
+                    .ok_or_else(|| anyhow::anyhow!("Sample has no buffer"))?;
+                let map = buffer
+                    .map_readable()
+                    .context("Failed to map buffer readable")?;
+                let data = map.as_slice();
 
-            // data expected size = width * height * 3
-            if data.len() < (width * height * 3) as usize {
-                eprintln!("Warning: buffer too small: {} bytes", data.len());
-                continue;
-            }
+                // Validate size
+                let expected = (width * height * 3) as usize;
+                if data.len() < expected {
+                    eprintln!(
+                        "Warning: buffer too small ({} < {}), skipping",
+                        data.len(),
+                        expected
+                    );
+                    continue;
+                }
 
-            // Build an image::RgbImage from raw bytes (RGB)
-            let img = RgbImage::from_raw(width, height, data.to_vec())
-                .ok_or_else(|| anyhow::anyhow!("Failed to build image from raw bytes"))?;
-            // We'll operate on a clone if we want to annotate
-            let mut out_img = img.clone();
+                // Build Mat from BGR bytes
+                let mut mat = mat_from_bgr_bytes(height, width, &data[..expected])
+                    .context("Failed to build Mat from raw bytes")?;
 
-            // Scan pixels to find red mask, compute bounding box and centroid
-            let mut min_x = width;
-            let mut min_y = height;
-            let mut max_x = 0u32;
-            let mut max_y = 0u32;
-            let mut count = 0u64;
-            let mut sum_x = 0u64;
-            let mut sum_y = 0u64;
+                // Convert to HSV
+                let mut hsv = Mat::default();
+                imgproc::cvt_color(&mat, &mut hsv, imgproc::COLOR_BGR2HSV, 0)?;
 
-            for y in 0..height {
-                for x in 0..width {
-                    let p = img.get_pixel(x, y);
-                    let r = p[0];
-                    let g = p[1];
-                    let b = p[2];
-                    let (h, s, v) = rgb_to_hsv(r, g, b);
-                    if is_red_hsv(h, s, v) {
-                        count += 1;
-                        sum_x += x as u64;
-                        sum_y += y as u64;
-                        if x < min_x {
-                            min_x = x;
-                        }
-                        if y < min_y {
-                            min_y = y;
-                        }
-                        if x > max_x {
-                            max_x = x;
-                        }
-                        if y > max_y {
-                            max_y = y;
-                        }
+                // Threshold for red: two ranges because hue wraps
+                // tune these values if necessary
+                let lower_red1 = core::Scalar::new(0.0, 120.0, 70.0, 0.0);
+                let upper_red1 = core::Scalar::new(10.0, 255.0, 255.0, 0.0);
+                let lower_red2 = core::Scalar::new(170.0, 120.0, 70.0, 0.0);
+                let upper_red2 = core::Scalar::new(180.0, 255.0, 255.0, 0.0);
 
-                        // Optionally mark mask-ish red pixel for debug (brighten)
-                        out_img.put_pixel(
-                            x,
-                            y,
-                            Rgb([255, (g / 2).saturating_add(50), (b / 2).saturating_add(50)]),
-                        );
+                let mut mask1 = Mat::default();
+                let mut mask2 = Mat::default();
+                core::in_range(&hsv, &lower_red1, &upper_red1, &mut mask1)?;
+                core::in_range(&hsv, &lower_red2, &upper_red2, &mut mask2)?;
+                let mut mask = Mat::default();
+                core::bitwise_or(&mask1, &mask2, &mut mask, &core::no_array()?)?;
+
+                // Optional: morphological open/close to reduce noise
+                let k = imgproc::get_structuring_element(
+                    imgproc::MORPH_ELLIPSE,
+                    core::Size::new(5, 5),
+                    core::Point::new(-1, -1),
+                )?;
+                imgproc::morphology_ex(
+                    &mask,
+                    &mut mask,
+                    imgproc::MORPH_OPEN,
+                    &k,
+                    core::Point::new(-1, -1),
+                    1,
+                    core::BORDER_DEFAULT,
+                    core::Scalar::all(0.0),
+                )?;
+                imgproc::morphology_ex(
+                    &mask,
+                    &mut mask,
+                    imgproc::MORPH_CLOSE,
+                    &k,
+                    core::Point::new(-1, -1),
+                    1,
+                    core::BORDER_DEFAULT,
+                    core::Scalar::all(0.0),
+                )?;
+
+                // Find contours
+                let mut contours = types::VectorOfVectorOfPoint::new();
+                imgproc::find_contours(
+                    &mask,
+                    &mut contours,
+                    imgproc::RETR_EXTERNAL,
+                    imgproc::CHAIN_APPROX_SIMPLE,
+                    core::Point::new(0, 0),
+                )?;
+
+                // Find largest contour by area
+                let mut largest_area = 0.0;
+                let mut best_rect = None;
+                for i in 0..contours.len() {
+                    let cnt = contours.get(i)?;
+                    let area = imgproc::contour_area(&cnt, false)?;
+                    if area > largest_area {
+                        largest_area = area;
+                        let rect = imgproc::bounding_rect(&cnt)?;
+                        best_rect = Some(rect);
                     }
                 }
-            }
 
-            // If found anything, compute centroid and bbox
-            if count > 0 {
-                let cx = (sum_x / count) as u32;
-                let cy = (sum_y / count) as u32;
-
-                println!(
-                    "Frame {}: red pixels = {}, bbox = ({},{})-({},{}) centroid = ({},{})",
-                    frame_count, count, min_x, min_y, max_x, max_y, cx, cy
-                );
-
-                // Annotate bounding box onto out_img
-                annotate_bbox(&mut out_img, min_x, min_y, max_x, max_y);
-
-                // Save annotated image for debugging occasionally
-                if frame_count % 30 == 0 {
-                    let filename = format!("/tmp/red_frame_{:05}.png", frame_count);
-                    let _ = out_img.save(&filename);
-                    println!("Saved annotated frame to {}", filename);
+                if let Some(r) = best_rect {
+                    // Draw bounding box and centroid on mat
+                    imgproc::rectangle(
+                        &mut mat,
+                        r,
+                        core::Scalar::new(0.0, 255.0, 0.0, 0.0),
+                        2,
+                        imgproc::LINE_8,
+                        0,
+                    )?;
+                    let cx = r.x + r.width / 2;
+                    let cy = r.y + r.height / 2;
+                    imgproc::circle(
+                        &mut mat,
+                        core::Point::new(cx, cy),
+                        5,
+                        core::Scalar::new(255.0, 0.0, 0.0, 0.0),
+                        -1,
+                        imgproc::LINE_8,
+                        0,
+                    )?;
+                    println!(
+                        "Frame {}: detected red object area {:.1} bbox x={} y={} w={} h={}",
+                        frame_count, largest_area, r.x, r.y, r.width, r.height
+                    );
+                } else {
+                    // optionally print no detection
+                    // println!("Frame {}: no red detected", frame_count);
                 }
-            } else {
-                println!("Frame {}: no red detected", frame_count);
-            }
 
-            // simple FPS print every 120 frames
-            if frame_count % 120 == 0 {
-                let elapsed = start.elapsed().as_secs_f32();
-                println!(
-                    "Processed {} frames in {:.2}s -> {:.2} FPS",
-                    frame_count,
-                    elapsed,
-                    frame_count as f32 / elapsed
-                );
+                // Show the annotated frame
+                highgui::imshow(window_name, &mat)?;
+                // waitKey(1) needed to refresh window and handle events
+                let key = highgui::wait_key(1)?;
+                if key == 113 || key == 81 {
+                    // 'q' or 'Q' to quit
+                    println!("Quit key pressed. Exiting.");
+                    break;
+                }
+
+                // Periodically print FPS
+                if frame_count % 120 == 0 {
+                    let elapsed = t0.elapsed().as_secs_f32();
+                    println!(
+                        "Processed {} frames in {:.2}s -> {:.2} FPS",
+                        frame_count,
+                        elapsed,
+                        frame_count as f32 / elapsed
+                    );
+                }
+
+                if frame_count == 361 {
+                    break;
+                }
             }
-        } else {
-            // appsink returned none => pipeline likely ended
-            eprintln!("No sample (pipeline ended?)");
-            break;
+            Err(e) => {
+                eprintln!("Error pulling sample from appsink: {}", e);
+                // small sleep to avoid busy loop on errors
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
         }
     }
 
+    // cleanup
     pipeline.set_state(gst::State::Null)?;
     Ok(())
 }
