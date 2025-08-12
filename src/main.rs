@@ -131,11 +131,12 @@ fn main() -> Result<()> {
     // Get the appsink
     let appsink = pipeline
         .clone()
-        .dynamic_cast::<gst::Bin>()?
+        .dynamic_cast::<gst::Bin>()
+        .map_err(|_| anyhow::anyhow!("Pipeline is not a Bin"))?
         .by_name("sink")
-        .expect("appsink element named 'sink' missing")
-        .downcast::<gst_app::AppSink>()
-        .map_err(|_| anyhow::anyhow!("Failed to downcast to AppSink"))?;
+        .ok_or_else(|| anyhow::anyhow!("appsink element missing"))?
+        .dynamic_cast::<gst_app::AppSink>()
+        .map_err(|_| anyhow::anyhow!("Element is not an AppSink"))?;
 
     // Configure appsink to pull samples
     appsink.set_caps(Some(
@@ -155,7 +156,7 @@ fn main() -> Result<()> {
 
     loop {
         // Pull sample (blocking)
-        if let Some(sample) = appsink.pull_sample() {
+        if let Ok(sample) = appsink.pull_sample() {
             frame_count += 1;
             let buffer = sample
                 .buffer()
