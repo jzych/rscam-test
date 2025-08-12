@@ -18,8 +18,7 @@ fn mat_from_bgr_bytes(rows: i32, cols: i32, data: &[u8]) -> Result<Mat> {
         );
     }
     let slice = &data[..expected];
-    // clone to get an owned Mat
-    let m = Mat::from_slice(slice)?.try_clone()?;
+    let m = Mat::from_slice(slice)?.try_clone()?; // convert BoxedRef to Mat
     let m = m.reshape(3, rows)?;
     Ok(m)
 }
