@@ -33,8 +33,8 @@ fn main() -> Result<()> {
 
     loop {
         let sample = match sink.pull_sample() {
-            Some(s) => s,
-            None => continue,
+            Ok(s) => s,
+            Err(_) => continue,
         };
 
         let buffer = sample.buffer().expect("No buffer in sample");
