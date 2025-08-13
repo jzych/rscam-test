@@ -12,14 +12,11 @@ fn main() -> Result<()> {
     // Try libcamera first, fallback to v4l2
     let pipeline_desc =
         "libcamerasrc ! video/x-raw,width=640,height=480,format=BGR ! appsink name=sink";
-    let pipeline = match gst::parse_launch(pipeline_desc) {
+    let pipeline = match gst::parse::launch(pipeline_desc) {
         Ok(p) => p,
-        Err(_) => {
-            eprintln!("libcamerasrc not found, using v4l2src...");
-            gst::parse_launch(
-                "v4l2src device=/dev/video0 ! video/x-raw,width=640,height=480,format=BGR ! appsink name=sink",
-            )?
-        }
+        Err(_) => gst::parse::launch(
+            "rpicamsrc ! video/x-raw,format=BGR,width=640,height=480 ! appsink name=sink",
+        )?,
     };
 
     let pipeline = pipeline
@@ -49,7 +46,8 @@ fn main() -> Result<()> {
         let width = s.get::<i32>("width")?;
         let height = s.get::<i32>("height")?;
 
-        let bgr = Mat::from_slice(&map)?.to_mat()?.reshape(3, height)?;
+        let bgr_ref = Mat::from_slice(&map)?.reshape(3, height)?;
+        let bgr = bgr_ref.try_clone()?; // make a real Mat
 
         // Convert to HSV
         let mut hsv = Mat::default();
