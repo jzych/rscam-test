@@ -49,7 +49,7 @@ fn main() -> Result<()> {
         let width = s.get::<i32>("width")?;
         let height = s.get::<i32>("height")?;
 
-        let bgr = Mat::from_slice(&map)?.reshape(3, height)?;
+        let bgr = Mat::from_slice(&map)?.to_mat()?.reshape(3, height)?;
 
         // Convert to HSV
         let mut hsv = Mat::default();
@@ -72,7 +72,7 @@ fn main() -> Result<()> {
         )?;
 
         let mut mask = Mat::default();
-        core::bitwise_or(&mask1, &mask2, &mut mask, &core::no_array()?)?;
+        core::bitwise_or(&mask1, &mask2, &mut mask, &core::no_array())?;
 
         // Highlight red areas
         let mut result = Mat::default();
