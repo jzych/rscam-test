@@ -4,6 +4,7 @@ use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
 use opencv::core::{self, CV_8UC3, Mat, Mat_AUTO_STEP};
 use opencv::{highgui, imgproc, prelude::*};
+use std::ffi::c_void;
 
 fn main() -> Result<()> {
     // Init GStreamer and OpenCV GUI
@@ -51,14 +52,18 @@ fn main() -> Result<()> {
         let height: i32 = s.get("height")?;
 
         // Create a Mat that references the GStreamer buffer
-        // frame is 2D with width × height × channels
-        let bgr = Mat::new_rows_cols_with_data(
-            height,
-            width,
-            CV_8UC3, // 8-bit unsigned, 3 channels (BGR)
-            map.as_ptr() as *mut core::c_void,
-            Mat_AUTO_STEP,
-        )?;
+        // Frame is 2D with width x height x channels
+        // SAFETY: We are creating a Mat view into GStreamer’s memory buffer.
+        // This is safe as long as `bgr` is not used after `map` goes out of scope.
+        let bgr = unsafe {
+            Mat::new_rows_cols_with_data_unsafe(
+                height,
+                width,
+                CV_8UC3,
+                map.as_ptr() as *mut c_void,
+                Mat_AUTO_STEP,
+            )?
+        };
 
         // Convert to HSV
         let mut hsv = Mat::default();
