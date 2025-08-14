@@ -72,37 +72,14 @@ fn main() -> Result<()> {
             )?
         };
 
-        // // Convert to HSV
-        // let mut hsv = Mat::default();
-        // imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_BGR2HSV, 0)?;
-
-        // // Mask for red
-        // let mut mask1 = Mat::default();
-        // let mut mask2 = Mat::default();
-        // core::in_range(
-        //     &hsv,
-        //     &core::Scalar::new(0.0, 100.0, 100.0, 0.0),
-        //     &core::Scalar::new(10.0, 255.0, 255.0, 0.0),
-        //     &mut mask1,
-        // )?;
-        // core::in_range(
-        //     &hsv,
-        //     &core::Scalar::new(160.0, 100.0, 100.0, 0.0),
-        //     &core::Scalar::new(179.0, 255.0, 255.0, 0.0),
-        //     &mut mask2,
-        // )?;
-
-        // let mut mask = Mat::default();
-        // core::bitwise_or(&mask1, &mask2, &mut mask, &core::no_array())?;
-
-        // // Highlight red areas
-        // let mut result = Mat::default();
-        // core::bitwise_and(&bgr, &bgr, &mut result, &mask)?;
+        // Convert to HSV
+        let mut hsv = Mat::default();
+        imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_BayerGR2GRAY, 0)?;
 
         // Show or save ever 100 frame
         if show_window {
             // Show window
-            highgui::imshow("Camera Capture", &bgr)?;
+            highgui::imshow("Camera Capture", &hsv)?;
             if highgui::wait_key(1)? == 27 {
                 break;
             }
@@ -111,7 +88,7 @@ fn main() -> Result<()> {
             frame_count += 1;
             if frame_count % 100 == 0 {
                 let filename = format!("/tmp/frame_{:06}.jpg", frame_count);
-                imgcodecs::imwrite(&filename, &bgr, &core::Vector::new())?;
+                imgcodecs::imwrite(&filename, &hsv, &core::Vector::new())?;
                 println!("Saved {}", filename);
             }
         }
