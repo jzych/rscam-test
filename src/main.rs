@@ -19,8 +19,7 @@ fn main() -> Result<()> {
     }
 
     // Hardware setup. Try libcamera first, fallback to v4l2.
-    let pipeline_desc =
-        "libcamerasrc ! video/x-raw,width=640,height=480,format=RGB ! appsink name=sink";
+    let pipeline_desc = "libcamerasrc ! videoconvert ! video/x-raw,format=RGB,width=640,height=480 ! appsink name=sink";
     let pipeline = match gst::parse::launch(pipeline_desc) {
         Ok(p) => p,
         Err(_) => gst::parse::launch(
