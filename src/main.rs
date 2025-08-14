@@ -2,14 +2,15 @@ use anyhow::Result;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
-use opencv::{core, highgui, imgproc, prelude::*};
+use opencv::core::{self, CV_8UC3, Mat, Mat_AUTO_STEP};
+use opencv::{highgui, imgproc, prelude::*};
 
 fn main() -> Result<()> {
     // Init GStreamer and OpenCV GUI
     gst::init()?;
-    highgui::named_window("Red Detection", highgui::WINDOW_AUTOSIZE)?;
+    highgui::named_window("Camera Capture", highgui::WINDOW_AUTOSIZE)?; // Don't work on my setup :c
 
-    // Try libcamera first, fallback to v4l2
+    // Hardware setup. Try libcamera first, fallback to v4l2.
     let pipeline_desc =
         "libcamerasrc ! video/x-raw,width=640,height=480,format=BGR ! appsink name=sink";
     let pipeline = match gst::parse::launch(pipeline_desc) {
@@ -23,15 +24,18 @@ fn main() -> Result<()> {
         .dynamic_cast::<gst::Pipeline>()
         .expect("Expected a Pipeline");
 
+    // Bridge between GStreamer and program. Raw frames can be pulled from it.
     let sink = pipeline
         .by_name("sink")
         .expect("Sink element not found")
         .dynamic_cast::<gst_app::AppSink>()
         .expect("Sink element is not an AppSink");
 
+    // Starts camera capture
     pipeline.set_state(gst::State::Playing)?;
 
     loop {
+        // Polling for next frame
         let sample = match sink.pull_sample() {
             Ok(s) => s,
             Err(_) => continue,
@@ -43,11 +47,18 @@ fn main() -> Result<()> {
         let caps = sample.caps().expect("No caps in sample");
         let s = caps.structure(0).expect("No structure in caps");
 
-        let width = s.get::<i32>("width")?;
-        let height = s.get::<i32>("height")?;
+        let width: i32 = s.get("width")?;
+        let height: i32 = s.get("height")?;
 
-        let bgr_ref = Mat::from_slice(&map)?.reshape(3, height)?;
-        let bgr = bgr_ref.try_clone()?; // make a real Mat
+        // Create a Mat that references the GStreamer buffer
+        // frame is 2D with width × height × channels
+        let bgr = Mat::new_rows_cols_with_data(
+            height,
+            width,
+            CV_8UC3, // 8-bit unsigned, 3 channels (BGR)
+            map.as_ptr() as *mut core::c_void,
+            Mat_AUTO_STEP,
+        )?;
 
         // Convert to HSV
         let mut hsv = Mat::default();
@@ -77,7 +88,7 @@ fn main() -> Result<()> {
         core::bitwise_and(&bgr, &bgr, &mut result, &mask)?;
 
         // Show
-        highgui::imshow("Red Detection", &result)?;
+        highgui::imshow("Camera Capture", &result)?;
         if highgui::wait_key(1)? == 27 {
             break; // ESC key
         }
