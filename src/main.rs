@@ -74,7 +74,7 @@ fn main() -> Result<()> {
 
         // Convert to HSV
         let mut hsv = Mat::default();
-        imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_BayerGR2GRAY, 0)?;
+        imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_BGR2HSV, 0)?;
 
         // Show or save ever 100 frame
         if show_window {
