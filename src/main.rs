@@ -19,11 +19,12 @@ fn main() -> Result<()> {
     }
 
     // Hardware setup. Try libcamera first, fallback to v4l2.
-    let pipeline_desc = "libcamerasrc ! videoconvert ! video/x-raw,format=RGB,width=640,height=480 ! appsink name=sink";
+    let pipeline_desc =
+        "libcamerasrc ! video/x-raw,width=640,height=480,format=BGR ! appsink name=sink";
     let pipeline = match gst::parse::launch(pipeline_desc) {
         Ok(p) => p,
         Err(_) => gst::parse::launch(
-            "rpicamsrc ! video/x-raw,format=RGB,width=640,height=480 ! appsink name=sink",
+            "rpicamsrc ! video/x-raw,format=BGR,width=640,height=480 ! appsink name=sink",
         )?,
     };
 
@@ -71,9 +72,9 @@ fn main() -> Result<()> {
             )?
         };
 
-        // Convert to HSV
-        let mut hsv = Mat::default();
-        imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_BGR2HSV, 0)?;
+        // // Convert to HSV
+        // let mut hsv = Mat::default();
+        // imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_BGR2HSV, 0)?;
 
         // // Mask for red
         // let mut mask1 = Mat::default();
@@ -101,7 +102,7 @@ fn main() -> Result<()> {
         // Show or save ever 100 frame
         if show_window {
             // Show window
-            highgui::imshow("Camera Capture", &hsv)?;
+            highgui::imshow("Camera Capture", &bgr)?;
             if highgui::wait_key(1)? == 27 {
                 break;
             }
@@ -110,7 +111,7 @@ fn main() -> Result<()> {
             frame_count += 1;
             if frame_count % 100 == 0 {
                 let filename = format!("/tmp/frame_{:06}.jpg", frame_count);
-                imgcodecs::imwrite(&filename, &hsv, &core::Vector::new())?;
+                imgcodecs::imwrite(&filename, &bgr, &core::Vector::new())?;
                 println!("Saved {}", filename);
             }
         }
