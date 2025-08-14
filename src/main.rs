@@ -73,7 +73,7 @@ fn main() -> Result<()> {
 
         // Convert to HSV
         let mut hsv = Mat::default();
-        imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_RGB2HSV, 0)?;
+        imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_BGR2HSV, 0)?;
 
         // // Mask for red
         // let mut mask1 = Mat::default();
