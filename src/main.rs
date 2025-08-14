@@ -2,8 +2,7 @@ use anyhow::Result;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
-use opencv::core::{self, CV_8UC3, Mat, Mat_AUTO_STEP};
-use opencv::{highgui, imgproc};
+use opencv::{core, highgui, imgcodecs, imgproc, prelude::*};
 use std::ffi::c_void;
 
 fn main() -> Result<()> {
