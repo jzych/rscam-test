@@ -20,11 +20,11 @@ fn main() -> Result<()> {
 
     // Hardware setup. Try libcamera first, fallback to v4l2.
     let pipeline_desc =
-        "libcamerasrc ! video/x-raw,width=640,height=480,format=BGR ! appsink name=sink";
+        "libcamerasrc ! video/x-raw,width=640,height=480,format=RGB ! appsink name=sink";
     let pipeline = match gst::parse::launch(pipeline_desc) {
         Ok(p) => p,
         Err(_) => gst::parse::launch(
-            "rpicamsrc ! video/x-raw,format=BGR,width=640,height=480 ! appsink name=sink",
+            "rpicamsrc ! video/x-raw,format=RGB,width=640,height=480 ! appsink name=sink",
         )?,
     };
 
@@ -74,7 +74,7 @@ fn main() -> Result<()> {
 
         // Convert to HSV
         let mut hsv = Mat::default();
-        imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_BGR2HSV, 0)?;
+        imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_RGB2HSV, 0)?;
 
         // // Mask for red
         // let mut mask1 = Mat::default();
