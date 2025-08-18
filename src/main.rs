@@ -18,7 +18,7 @@ fn main() -> Result<()> {
         highgui::named_window("Camera Capture", highgui::WINDOW_AUTOSIZE)?; // While sshing -X flag is needed and enabled X11 forwarding
     }
 
-    // Hardware setup. Try libcamera first, fallback to v4l2.
+    // Hardware setup. Try libcamera first, fallback to v4l2 for older OS.
     let pipeline_desc = "libcamerasrc ! videoconvert ! video/x-raw,format=BGR,width=640,height=480 ! appsink name=sink";
     let pipeline = match gst::parse::launch(pipeline_desc) {
         Ok(p) => p,
@@ -73,7 +73,7 @@ fn main() -> Result<()> {
 
         // Convert to HSV
         let mut hsv = Mat::default();
-        imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_RGB2HSV, 0)?;
+        imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_BGR2HSV, 0)?;
 
         // Show or save ever 100 frame
         if show_window {
