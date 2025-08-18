@@ -72,10 +72,8 @@ fn main() -> Result<()> {
         };
 
         // Convert to HSV
-        let mut middle = Mat::default();
-        imgproc::cvt_color(&bgr, &mut middle, imgproc::COLOR_YUV2BGR_NV21, 0)?;
         let mut hsv = Mat::default();
-        imgproc::cvt_color(&middle, &mut hsv, imgproc::COLOR_BGR2HSV, 0)?;
+        imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_BGR2HSV, 0)?;
 
         // Show or save ever 100 frame
         if show_window {
@@ -86,12 +84,13 @@ fn main() -> Result<()> {
             }
         } else {
             // Headless mode: save every 100 frames
-            frame_count += 1;
             if frame_count % 100 == 0 {
+                println!("Caps: {:?}", s.to_string());
                 let filename = format!("/tmp/frame_{:06}.jpg", frame_count);
                 imgcodecs::imwrite(&filename, &hsv, &core::Vector::new())?;
                 println!("Saved {}", filename);
             }
+            frame_count += 1;
         }
     }
 
