@@ -71,14 +71,10 @@ fn main() -> Result<()> {
             )?
         };
 
-        // Convert to HSV
-        let mut hsv = Mat::default();
-        imgproc::cvt_color(&bgr, &mut hsv, imgproc::COLOR_BGR2HSV, 0)?;
-
         // Show or save ever 100 frame
         if show_window {
             // Show window
-            highgui::imshow("Camera Capture", &hsv)?;
+            highgui::imshow("Camera Capture", &bgr)?;
             if highgui::wait_key(1)? == 27 {
                 break;
             }
@@ -87,7 +83,7 @@ fn main() -> Result<()> {
             if frame_count % 100 == 0 {
                 println!("Caps: {:?}", s.to_string());
                 let filename = format!("/tmp/frame_{:06}.jpg", frame_count);
-                imgcodecs::imwrite(&filename, &hsv, &core::Vector::new())?;
+                imgcodecs::imwrite(&filename, &bgr, &core::Vector::new())?;
                 println!("Saved {}", filename);
             }
             frame_count += 1;
