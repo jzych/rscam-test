@@ -5,12 +5,17 @@ use gstreamer_app as gst_app;
 use opencv::core::{self, CV_8UC3, Mat, Mat_AUTO_STEP};
 use opencv::{highgui, imgcodecs, imgproc};
 use std::ffi::c_void;
+use std::time::{Duration, Instant};
 
 fn main() -> Result<()> {
     // Parse command line args
     let args: Vec<String> = std::env::args().collect();
     let show_window = args.iter().any(|a| a == "-c");
+    let debug_log = args.iter().any(|a| a == "-d");
+
     let mut frame_count = 0;
+    let mut last_frame_count = 0;
+    let mut last_time = Instant::now();
 
     // Init GStreamer and OpenCV GUI
     gst::init()?;
@@ -48,6 +53,7 @@ fn main() -> Result<()> {
             Err(_) => continue,
         };
 
+        // Mapping buffer into memory
         let buffer = sample.buffer().expect("No buffer in sample");
         let map = buffer.map_readable().expect("Failed to map buffer");
 
@@ -81,13 +87,27 @@ fn main() -> Result<()> {
         } else {
             // Headless mode: save every 100 frames
             if frame_count % 100 == 0 {
-                println!("Caps: {:?}", s.to_string());
                 let filename = format!("/tmp/frame_{:06}.jpg", frame_count);
                 imgcodecs::imwrite(&filename, &bgr, &core::Vector::new())?;
                 println!("Saved {}", filename);
             }
-            frame_count += 1;
         }
+
+        // Debug logs
+        if debug_log {
+            // Calculate real FPS
+            if last_time.elapsed() >= Duration::from_secs(1) {
+                println!("Actual FPS: {}", frame_count - last_frame_count);
+                last_frame_count = frame_count;
+                last_time = Instant::now();
+            }
+
+            // Show camera config
+            if frame_count % 100 == 0 {
+                println!("Caps: {:?}", s.to_string());
+            }
+        }
+        frame_count += 1;
     }
 
     pipeline.set_state(gst::State::Null)?;
