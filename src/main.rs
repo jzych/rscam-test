@@ -3,7 +3,7 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
 use opencv::core::{self, CV_8UC3, Mat, Mat_AUTO_STEP};
-use opencv::{highgui, imgcodecs, imgproc};
+use opencv::{highgui, imgcodecs};
 use std::ffi::c_void;
 use std::time::{Duration, Instant};
 

@@ -29,3 +29,9 @@ Run:
 `sudo apt install -y libopencv-dev`
 
 Note: to build OpenCV you need more then 1GB od RAM, best more then 4GB. In case of shortage increase you swap partition to at least 2GB.
+
+## Run options
+
+`-c` for live camera feed
+
+`-d` for debug logs
